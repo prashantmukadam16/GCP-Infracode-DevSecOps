@@ -42,4 +42,13 @@ resource "google_container_cluster" "gke" {
   deletion_protection = var.deletion_protection
 
   depends_on = [google_compute_subnetwork.gke]
+
+  master_authorized_networks_config {
+  gcp_public_cidrs_access_enabled = false
+
+  cidr_blocks {
+    cidr_block   = var.master_authorized_cidr
+    display_name = "Jenkins-Server"
+  }
+}
 }
