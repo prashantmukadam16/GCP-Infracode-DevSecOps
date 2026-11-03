@@ -38,3 +38,7 @@ variable "deletion_protection" {
   type        = bool
   default     = false
 }
+variable "master_authorized_cidr" {
+  description = "Public egress CIDR allowed to access the GKE control plane"
+  type        = string
+}
