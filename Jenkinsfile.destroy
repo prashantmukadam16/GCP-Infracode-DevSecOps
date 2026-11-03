@@ -1,0 +1,67 @@
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
+    environment {
+        GOOGLE_PROJECT   = 'project-88c619e6-27a3-4887-94b'
+        TF_IN_AUTOMATION = 'true'
+        TF_INPUT         = 'false'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main',
+                    url: 'https://github.com/prashantmukadam16/GCP-Infracode.git'
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                dir('terraform') {
+                    sh 'terraform init -input=false'
+                }
+            }
+        }
+
+        stage('Create Destroy Plan') {
+            steps {
+                dir('terraform') {
+                    sh '''
+                        terraform plan -destroy \
+                          -input=false \
+                          -var="project_id=${GOOGLE_PROJECT}" \
+                          -out=tfplan-destroy
+                    '''
+                }
+            }
+        }
+
+        stage('Approve Destroy') {
+            steps {
+                timeout(time: 30, unit: 'MINUTES') {
+                    input message: 'WARNING: This destroys resources managed by this Terraform state. Review and approve?',
+                          ok: 'Approve Destroy'
+                }
+            }
+        }
+
+        stage('Terraform Destroy') {
+            steps {
+                dir('terraform') {
+                    sh 'terraform apply -input=false tfplan-destroy'
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            sh 'rm -f terraform/tfplan-destroy'
+        }
+    }
+}

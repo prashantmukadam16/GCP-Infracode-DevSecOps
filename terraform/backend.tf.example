@@ -1,0 +1,8 @@
+# Rename to backend.tf after creating the GCS bucket.
+# Backend bucket creation is intentionally separate from this stack.
+terraform {
+  backend "gcs" {
+    bucket = "REPLACE_WITH_EXISTING_TF_STATE_BUCKET"
+    prefix = "gcp-infrastructure/dev"
+  }
+}

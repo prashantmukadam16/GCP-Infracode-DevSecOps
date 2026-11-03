@@ -1,0 +1,2 @@
+# Add a finding ID only after reviewing it and documenting the reason,
+# owner and review/expiry date. Do not blanket-ignore HIGH or CRITICAL findings.
