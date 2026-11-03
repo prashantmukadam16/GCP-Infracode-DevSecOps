@@ -49,4 +49,5 @@ module "gke" {
   deletion_protection = var.gke_deletion_protection
 
   depends_on = [google_project_service.required_apis]
+  master_authorized_cidr = var.master_authorized_cidr
 }
