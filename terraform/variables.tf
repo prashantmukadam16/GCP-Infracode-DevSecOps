@@ -56,3 +56,8 @@ variable "gke_deletion_protection" {
   type        = bool
   default     = false
 }
+
+variable "master_authorized_cidr" {
+  description = "Jenkins public egress IP in CIDR notation"
+  type        = string
+}
