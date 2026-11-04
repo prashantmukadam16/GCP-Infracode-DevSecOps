@@ -13,7 +13,7 @@ resource "google_sql_database_instance" "mysql" {
     disk_autoresize   = true
 
     backup_configuration {
-      enabled                        = true
+      enabled         = true
       binary_log_enabled = true
     }
 
