@@ -126,6 +126,7 @@ pipeline {
             steps {
                 dir("${TF_DIR}") {
                     sh '''
+                       terraform show -json tfplan > tfplan.json
                         trivy config \
                           --severity HIGH,CRITICAL \
                           --exit-code 1 \
