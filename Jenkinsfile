@@ -1,56 +1,50 @@
 pipeline {
+
     agent any
 
     options {
         timestamps()
         disableConcurrentBuilds()
-        buildDiscarder(logRotator(numToKeepStr: '20'))
     }
 
     environment {
-        GIT_REPO         = 'https://github.com/prashantmukadam16/GCP-Infracode.git'
-        GIT_BRANCH       = 'main'
-        GOOGLE_PROJECT   = 'project-88c619e6-27a3-4887-94b'
-        REGION           = 'us-central1'
-        GKE_CLUSTER      = 'gke-dev'
-        TF_DIR           = 'terraform'
-        TF_IN_AUTOMATION = 'true'
-        TF_INPUT         = 'false'
-        ARGOCD_VERSION   = 'v3.2.0'
-        SCANNER_HOME     = tool 'sonar-scanner'
+        PROJECT_ID = 'project-88c619e6-27a3-4887-94b'
+        REGION = 'us-central1'
+
+        TF_DIR = 'terraform'
+        GKE_CLUSTER = 'gke-dev-cluster'
+
+        SCANNER_HOME = tool 'sonar-scanner'
+        MASTER_AUTHORIZED_CIDR = '34.60.89.231/32'
     }
 
     stages {
+
+        // 1. Git Checkout
         stage('Git Checkout') {
             steps {
-                git branch: "${GIT_BRANCH}", url: "${GIT_REPO}"
+                git branch: 'main',
+                    url: 'https://github.com/prashantmukadam16/GCP-Infracode-DevSecOps.git'
             }
         }
 
-        stage('Preflight') {
+        // 2. Verify Tools and Authentication
+        stage('Preflight Check') {
             steps {
                 sh '''
-                    set -eu
                     terraform version
                     trivy --version
                     gcloud version
                     kubectl version --client
-                    gke-gcloud-auth-plugin --version
-                    gcloud config set project "$GOOGLE_PROJECT"
+
+                    gcloud config set project "$PROJECT_ID"
                     gcloud auth list
                 '''
             }
         }
 
-        stage('Terraform Format') {
-            steps {
-                dir("${TF_DIR}") {
-                    sh 'terraform fmt -check -recursive'
-                }
-            }
-        }
-
-        stage('Terraform Init and Validate') {
+        // 4. Terraform Initialization and Validation
+        stage('Terraform Validate') {
             steps {
                 dir("${TF_DIR}") {
                     sh '''
@@ -61,10 +55,10 @@ pipeline {
             }
         }
 
+        // 5. Trivy IaC Security Scan
         stage('Trivy IaC Scan') {
             steps {
                 sh '''
-                    set -eu
                     trivy config \
                       --skip-dirs .git \
                       --skip-dirs terraform/.terraform \
@@ -77,10 +71,10 @@ pipeline {
             }
         }
 
+        // 6. Trivy Secret Scan
         stage('Trivy Secret Scan') {
             steps {
                 sh '''
-                    set -eu
                     trivy fs \
                       --scanners secret \
                       --severity HIGH,CRITICAL \
@@ -92,14 +86,18 @@ pipeline {
             }
         }
 
+        // 7. SonarQube Code Analysis
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonar') {
-                    sh '"$SCANNER_HOME/bin/sonar-scanner"'
+                    sh '''
+                        "$SCANNER_HOME/bin/sonar-scanner"
+                    '''
                 }
             }
         }
 
+        // 8. SonarQube Quality Gate
         stage('SonarQube Quality Gate') {
             steps {
                 timeout(time: 30, unit: 'MINUTES') {
@@ -108,24 +106,26 @@ pipeline {
             }
         }
 
+        // 9. Terraform Plan
         stage('Terraform Plan') {
             steps {
                 dir("${TF_DIR}") {
                     sh '''
                         terraform plan \
                           -input=false \
-                          -var-file="terraform.tfvars.example" \
+                          -var="project_id=${PROJECT_ID}" \
+                          -var="master_authorized_cidr=${MASTER_AUTHORIZED_CIDR}" \
                           -out=tfplan
                     '''
                 }
             }
         }
 
-        stage('Trivy Terraform Plan Scan') {
+        // 10. Trivy Terraform Plan Scan
+        stage('Trivy Plan Scan') {
             steps {
                 dir("${TF_DIR}") {
                     sh '''
-                        set -eu
                         trivy config \
                           --severity HIGH,CRITICAL \
                           --exit-code 1 \
@@ -137,84 +137,70 @@ pipeline {
             }
         }
 
-        stage('Review and Approve Plan') {
+        // 11. Manual Approval
+        stage('Infrastructure Approval') {
             steps {
                 timeout(time: 30, unit: 'MINUTES') {
-                    input message: 'Review the Terraform plan. Approve GCP infrastructure deployment?',
-                          ok: 'Approve and Apply'
+                    input message: 'Approve GCP infrastructure deployment?',
+                          ok: 'Deploy Infrastructure'
                 }
             }
         }
 
+        // 12. Terraform Apply
         stage('Terraform Apply') {
             steps {
                 dir("${TF_DIR}") {
-                    sh 'terraform apply -input=false tfplan'
+                    sh '''
+                        terraform apply \
+                          -input=false \
+                          -auto-approve \
+                          tfplan
+                    '''
                 }
             }
         }
 
-        stage('Connect to GKE') {
+        // 13. Connect to GKE
+        stage('GKE Authentication') {
             steps {
                 sh '''
-                    set -eu
-                    gcloud container clusters get-credentials "$GKE_CLUSTER" \
+                    gcloud container clusters get-credentials \
+                      "$GKE_CLUSTER" \
                       --region "$REGION" \
-                      --project "$GOOGLE_PROJECT"
+                      --project "$PROJECT_ID"
+
                     kubectl get nodes
                 '''
             }
         }
 
-        stage('Install or Update Argo CD') {
+        // 14. Install Argo CD
+        stage('Install Argo CD') {
             steps {
                 sh '''
-                    set -eu
-                    kubectl create namespace argocd \
-                      --dry-run=client -o yaml | kubectl apply -f -
+                    if ! kubectl get namespace argocd >/dev/null 2>&1; then
+                        kubectl create namespace argocd
+                    fi
 
-                    kubectl apply --server-side --force-conflicts \
-                      -n argocd \
-                      -f "https://raw.githubusercontent.com/argoproj/argo-cd/${ARGOCD_VERSION}/manifests/install.yaml"
+                    kubectl apply -n argocd \
+                      --server-side \
+                      --force-conflicts \
+                      -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.2.0/manifests/install.yaml
 
-                    kubectl rollout status deployment/argocd-server \
-                      -n argocd --timeout=600s
-                    kubectl rollout status deployment/argocd-repo-server \
-                      -n argocd --timeout=600s
-                    kubectl rollout status statefulset/argocd-application-controller \
-                      -n argocd --timeout=600s
+                    kubectl wait \
+                      --for=condition=Established \
+                      --timeout=120s \
+                      crd/applications.argoproj.io
                 '''
             }
         }
 
-        stage('Register GitOps Application') {
+        // 15. Argo CD GitOps Deployment
+        stage('Argo CD GitOps Deployment') {
             steps {
                 sh '''
-                    set -eu
                     kubectl apply -f argocd/application.yaml
-
-                    kubectl wait \
-                      --for=jsonpath='{.status.sync.status}'=Synced \
-                      application/gcp-infracode-app \
-                      -n argocd \
-                      --timeout=600s
-
-                    kubectl wait \
-                      --for=jsonpath='{.status.health.status}'=Healthy \
-                      application/gcp-infracode-app \
-                      -n argocd \
-                      --timeout=600s
-                '''
-            }
-        }
-
-        stage('Deployment Verification') {
-            steps {
-                sh '''
-                    set -eu
-                    kubectl get nodes
-                    kubectl get applications -n argocd
-                    kubectl get deployments,pods,services -n devops-demo
 
                     kubectl wait \
                       --for=condition=Available \
@@ -224,9 +210,29 @@ pipeline {
                 '''
             }
         }
+
+        // 16. Final Verification
+        stage('Deployment Verification') {
+            steps {
+                sh '''
+                    echo "GKE Cluster:"
+                    kubectl get nodes
+
+                    echo "Kubernetes Deployments:"
+                    kubectl get deployments -n devops-demo
+
+                    echo "Kubernetes Services:"
+                    kubectl get services -n devops-demo
+
+                    echo "Argo CD Applications:"
+                    kubectl get applications -n argocd
+                '''
+            }
+        }
     }
 
     post {
+
         always {
             archiveArtifacts artifacts: 'trivy-*.json',
                 allowEmptyArchive: true
@@ -235,11 +241,13 @@ pipeline {
                 rm -f terraform/tfplan terraform/tfplan.json
             '''
         }
+
         success {
-            echo 'GCP infrastructure provisioning and Argo CD GitOps deployment completed.'
+            echo 'GCP infrastructure and GKE GitOps deployment completed!'
         }
+
         failure {
-            echo 'Pipeline failed. Review Jenkins console output and archived security reports.'
+            echo 'Pipeline failed. Review Jenkins console output and security reports.'
         }
     }
 }
