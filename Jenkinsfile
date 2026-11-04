@@ -114,9 +114,8 @@ pipeline {
                     sh '''
                         terraform plan \
                           -input=false \
-                          -var="project_id=${GOOGLE_PROJECT}" \
+                          -var-file="terraform.tfvars.example" \
                           -out=tfplan
-                        terraform show -json tfplan > tfplan.json
                     '''
                 }
             }
