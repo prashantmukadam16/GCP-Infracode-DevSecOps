@@ -12,7 +12,7 @@ pipeline {
         REGION = 'us-central1'
 
         TF_DIR = 'terraform'
-        GKE_CLUSTER = 'gke-dev-cluster'
+        GKE_CLUSTER = 'gke-dev'
 
         SCANNER_HOME = tool 'sonar-scanner'
         MASTER_AUTHORIZED_CIDR = '34.60.89.231/32'
