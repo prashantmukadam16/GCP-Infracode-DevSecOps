@@ -271,19 +271,45 @@ pipeline {
         stage('Install Argo CD') {
             steps {
                 sh '''
-                    if ! kubectl get namespace argocd >/uat/null 2>&1; then
+                    set -eu
+
+                    echo "Checking Argo CD namespace..."
+
+                    if ! kubectl get namespace argocd >/dev/null 2>&1; then
                         kubectl create namespace argocd
+                    else
+                        echo "Argo CD namespace already exists. Skipping creation."
                     fi
 
+                    echo "Installing or updating Argo CD..."
+
                     kubectl apply -n argocd \
-                      --server-side \
-                      --force-conflicts \
-                      -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.2.0/manifests/install.yaml
+                    --server-side \
+                    --force-conflicts \
+                    -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.2.0/manifests/install.yaml
+
+                    echo "Waiting for Argo CD CRD..."
 
                     kubectl wait \
-                      --for=condition=Established \
-                      --timeout=120s \
-                      crd/applications.argoproj.io
+                    --for=condition=Established \
+                    --timeout=120s \
+                    crd/applications.argoproj.io
+
+                    echo "Waiting for Argo CD server..."
+
+                    kubectl rollout status \
+                    deployment/argocd-server \
+                    -n argocd \
+                    --timeout=300s
+
+                    echo "Waiting for Argo CD application controller..."
+
+                    kubectl rollout status \
+                    statefulset/argocd-application-controller \
+                    -n argocd \
+                    --timeout=300s
+
+                    echo "Argo CD installation completed."
                 '''
             }
         }
