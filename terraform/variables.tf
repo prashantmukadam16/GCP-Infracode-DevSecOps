@@ -12,7 +12,7 @@ variable "region" {
 variable "environment" {
   description = "Environment name used in resource names"
   type        = string
-  default     = "dev"
+  default     = "uat"
 }
 
 variable "mysql_tier" {

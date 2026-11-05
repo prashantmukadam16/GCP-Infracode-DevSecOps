@@ -1,6 +1,6 @@
 project_id  = "project-88c619e6-27a3-4887-94b"
 region      = "us-central1"
-environment = "dev"
+environment = "uat"
 
 mysql_tier                = "db-custom-2-7680"
 mysql_deletion_protection = false
