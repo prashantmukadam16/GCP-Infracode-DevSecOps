@@ -59,14 +59,38 @@ pipeline {
         stage('Trivy IaC Scan') {
             steps {
                 sh '''
+                    set -eu
+
+                    echo "Removing stale Terraform plan artifacts..."
+                    rm -f terraform/tfplan \
+                        terraform/tfplan.json \
+                        terraform/tfplan.tfplan.json
+
+                    echo "Running Trivy source IaC scan..."
+
                     trivy config \
-                      --skip-dirs .git \
-                      --skip-dirs terraform/.terraform \
-                      --severity HIGH,CRITICAL \
-                      --exit-code 1 \
-                      --format json \
-                      --output "$WORKSPACE/trivy-iac.json" \
-                      .
+                    --skip-dirs .git \
+                    --skip-dirs terraform/.terraform \
+                    --skip-files terraform/tfplan.tfplan.json \
+                    --severity HIGH,CRITICAL \
+                    --exit-code 1 \
+                    --format json \
+                    --output trivy-iac.json \
+                    .
+
+                    echo "Checking Trivy findings..."
+                    jq -r '
+                    .Results[]? as $r
+                    | $r.Misconfigurations[]?
+                    | [
+                        $r.Target,
+                        $r.Type,
+                        .Severity,
+                        .ID,
+                        .Title
+                        ]
+                    | @tsv
+                    ' trivy-iac.json
                 '''
             }
         }
