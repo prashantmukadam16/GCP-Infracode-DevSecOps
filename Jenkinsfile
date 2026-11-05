@@ -299,7 +299,7 @@ pipeline {
 
                     echo "Checking application namespace..."
 
-                    if ! kubectl get namespace devops-demo >/dev/null 2>&1; then
+                    if ! kubectl get namespace devops-demo >/uat/null 2>&1; then
                         echo "Namespace missing. Creating devops-demo..."
                         kubectl create namespace devops-demo
                     else
