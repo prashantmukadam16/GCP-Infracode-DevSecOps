@@ -12,7 +12,7 @@ pipeline {
         REGION = 'us-central1'
 
         TF_DIR = 'terraform'
-        GKE_CLUSTER = 'gke-dev'
+        GKE_CLUSTER = 'gke-uat'
 
         SCANNER_HOME = tool 'sonar-scanner'
         MASTER_AUTHORIZED_CIDR = '34.60.89.231/32'
@@ -271,7 +271,7 @@ pipeline {
         stage('Install Argo CD') {
             steps {
                 sh '''
-                    if ! kubectl get namespace argocd >/dev/null 2>&1; then
+                    if ! kubectl get namespace argocd >/uat/null 2>&1; then
                         kubectl create namespace argocd
                     fi
 

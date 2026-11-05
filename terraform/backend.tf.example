@@ -3,6 +3,6 @@
 terraform {
   backend "gcs" {
     bucket = "REPLACE_WITH_EXISTING_TF_STATE_BUCKET"
-    prefix = "gcp-infrastructure/dev"
+    prefix = "gcp-infrastructure/uat"
   }
 }
