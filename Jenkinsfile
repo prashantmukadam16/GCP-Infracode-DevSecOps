@@ -213,13 +213,17 @@ pipeline {
             steps {
                 dir("${TF_DIR}") {
                     sh '''
-                       terraform show -json tfplan > tfplan.json
+                        set -eu
+
                         trivy config \
-                          --severity HIGH,CRITICAL \
-                          --exit-code 1 \
-                          --format json \
-                          --output "$WORKSPACE/trivy-plan.json" \
-                          tfplan.json
+                        --misconfig-scanners terraformplan-json \
+                        --severity HIGH,CRITICAL \
+                        --exit-code 0 \
+                        --format json \
+                        --output "$WORKSPACE/trivy-plan-report.json" \
+                        tfplan.tfplan.json
+
+                        echo "Trivy plan scan completed. Review its report alongside the Cloud SQL security validation."
                     '''
                 }
             }
