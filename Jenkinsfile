@@ -412,3 +412,5 @@ pipeline {
             echo 'Pipeline failed. Review Jenkins console output and security reports.'
         }
     }
+
+} // Closing pipeline block
