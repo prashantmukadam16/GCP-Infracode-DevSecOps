@@ -320,13 +320,12 @@ pipeline {
                 sh '''
                     set -eu
 
-                    echo "Checking Argo CD application CRD..."
+                    echo "Checking Argo CD Application CRD..."
                     kubectl get crd applications.argoproj.io
 
-                    echo "Checking application namespace..."
+                    echo "Checking target namespace..."
 
                     if ! kubectl get namespace devops-demo >/dev/null 2>&1; then
-                        echo "Namespace missing. Creating devops-demo..."
                         kubectl create namespace devops-demo
                     else
                         echo "Namespace already exists. Skipping creation."
@@ -337,26 +336,36 @@ pipeline {
 
                     echo "Waiting for Argo CD synchronization..."
 
-                    kubectl wait \
-                    --for=jsonpath='{.status.sync.status}'=Synced \
-                    application/gcp-infracode-app \
-                    -n argocd \
-                    --timeout=600s
+                    if ! kubectl wait \
+                        --for=jsonpath='{.status.sync.status}'=Synced \
+                        application/gcp-infracode-app \
+                        -n argocd \
+                        --timeout=600s; then
 
-                    echo "Waiting for Argo CD application health..."
+                        echo "Argo CD synchronization failed. Application details:"
+                        kubectl get application gcp-infracode-app -n argocd -o yaml
+                        exit 1
+                    fi
 
-                    kubectl wait \
-                    --for=jsonpath='{.status.health.status}'=Healthy \
-                    application/gcp-infracode-app \
-                    -n argocd \
-                    --timeout=600s
+                    echo "Waiting for application health..."
+
+                    if ! kubectl wait \
+                        --for=jsonpath='{.status.health.status}'=Healthy \
+                        application/gcp-infracode-app \
+                        -n argocd \
+                        --timeout=600s; then
+
+                        echo "Application health check failed:"
+                        kubectl get application gcp-infracode-app -n argocd -o yaml
+                        exit 1
+                    fi
 
                     echo "Checking NGINX deployment..."
 
                     kubectl rollout status \
-                    deployment/nginx-deployment \
-                    -n devops-demo \
-                    --timeout=300s
+                        deployment/nginx-deployment \
+                        -n devops-demo \
+                        --timeout=300s
 
                     echo "GitOps deployment completed successfully."
                 '''
