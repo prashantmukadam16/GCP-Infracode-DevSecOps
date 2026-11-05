@@ -393,22 +393,22 @@ pipeline {
     }
 
     post {
+    always {
+        archiveArtifacts artifacts: 'trivy-*.json',
+            allowEmptyArchive: true
 
-        always {
-            archiveArtifacts artifacts: 'trivy-*.json',
-                allowEmptyArchive: true
+        sh '''
+            rm -f terraform/tfplan \
+                  terraform/tfplan.json \
+                  terraform/tfplan.tfplan.json
+        '''
+    }
 
-            sh '''
-                rm -f terraform/tfplan terraform/tfplan.json
-            '''
-        }
+    success {
+        echo 'GCP infrastructure and GKE GitOps deployment completed!'
+    }
 
-        success {
-            echo 'GCP infrastructure and GKE GitOps deployment completed!'
-        }
-
-        failure {
-            echo 'Pipeline failed. Review Jenkins console output and security reports.'
-        }
+    failure {
+        echo 'Pipeline failed. Review Jenkins console output and security reports.'
     }
 }
