@@ -135,11 +135,74 @@ pipeline {
             steps {
                 dir("${TF_DIR}") {
                     sh '''
+                        set -eu
+
                         terraform plan \
-                          -input=false \
-                          -var="project_id=${PROJECT_ID}" \
-                          -var="master_authorized_cidr=${MASTER_AUTHORIZED_CIDR}" \
-                          -out=tfplan
+                        -input=false \
+                        -var="project_id=${PROJECT_ID}" \
+                        -var="master_authorized_cidr=${MASTER_AUTHORIZED_CIDR}" \
+                        -out=tfplan
+
+                        terraform show -json tfplan > tfplan.tfplan.json
+
+                        echo "Validating Cloud SQL security settings..."
+
+                        jq -e '
+                        ([.resource_changes[]
+                            | select(
+                                .address ==
+                                "module.mysql.google_sql_database_instance.mysql"
+                            )
+                        ][0]) as $r
+
+                        | ($r != null)
+                            and (
+                            $r.change.after.settings[0]
+                                .ip_configuration[0].ipv4_enabled == false
+                            )
+                            and (
+                            $r.change.after.settings[0]
+                                .ip_configuration[0].ssl_mode == "ENCRYPTED_ONLY"
+                            )
+                            and (
+                            (
+                                $r.change.after.settings[0]
+                                .ip_configuration[0].authorized_networks // []
+                            ) | length == 0
+                            )
+                        ' tfplan.tfplan.json
+
+                        echo "Validating private VPC network wiring..."
+
+                        jq -e '
+                        .configuration.root_module.module_calls.mysql
+                        as $mysql
+
+                        | (
+                            $mysql.expressions.network_id.references
+                            | index("module.network.network_id")
+                            ) != null
+
+                        and (
+                            [
+                            $mysql.module.resources[]
+                            | select(
+                                .type == "google_sql_database_instance"
+                                and .name == "mysql"
+                                )
+                            | .expressions.settings[0]
+                                .ip_configuration[0]
+                            ][0]
+                            | (.ipv4_enabled.constant_value == false)
+                            and (.ssl_mode.constant_value == "ENCRYPTED_ONLY")
+                            and (
+                                (.private_network.references // [])
+                                | index("var.network_id") != null
+                            )
+                        )
+                        ' tfplan.tfplan.json
+
+                        echo "Cloud SQL security validation passed."
                     '''
                 }
             }
