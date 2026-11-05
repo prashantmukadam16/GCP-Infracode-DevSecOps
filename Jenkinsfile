@@ -292,13 +292,47 @@ pipeline {
         stage('Argo CD GitOps Deployment') {
             steps {
                 sh '''
+                    set -eu
+
+                    echo "Checking Argo CD application CRD..."
+                    kubectl get crd applications.argoproj.io
+
+                    echo "Checking application namespace..."
+
+                    if ! kubectl get namespace devops-demo >/dev/null 2>&1; then
+                        echo "Namespace missing. Creating devops-demo..."
+                        kubectl create namespace devops-demo
+                    else
+                        echo "Namespace already exists. Skipping creation."
+                    fi
+
+                    echo "Applying Argo CD Application..."
                     kubectl apply -f argocd/application.yaml
 
+                    echo "Waiting for Argo CD synchronization..."
+
                     kubectl wait \
-                      --for=condition=Available \
-                      deployment/nginx-deployment \
-                      -n devops-demo \
-                      --timeout=300s
+                    --for=jsonpath='{.status.sync.status}'=Synced \
+                    application/gcp-infracode-app \
+                    -n argocd \
+                    --timeout=600s
+
+                    echo "Waiting for Argo CD application health..."
+
+                    kubectl wait \
+                    --for=jsonpath='{.status.health.status}'=Healthy \
+                    application/gcp-infracode-app \
+                    -n argocd \
+                    --timeout=600s
+
+                    echo "Checking NGINX deployment..."
+
+                    kubectl rollout status \
+                    deployment/nginx-deployment \
+                    -n devops-demo \
+                    --timeout=300s
+
+                    echo "GitOps deployment completed successfully."
                 '''
             }
         }
